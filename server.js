@@ -1,112 +1,138 @@
 const express = require("express");
+const { PrismaClient } = require("@prisma/client");
 
 const app = express();
+const prisma = new PrismaClient();
 const PORT = 3000;
 
-// Middleware to parse JSON from request body
 app.use(express.json());
 
-// Fake database
-let tasks = [
-  {
-    id: 1,
-    title: "Learn Express",
-    completed: false,
-  },
-  {
-    id: 2,
-    title: "Build Task API",
-    completed: false,
-  },
-];
-
 // GET - Return all tasks
-app.get("/tasks", (req, res) => {
-  res.status(200).json(tasks);
+app.get("/tasks", async (req, res) => {
+  try {
+    const tasks = await prisma.task.findMany();
+    res.status(200).json(tasks);
+  } catch (error) {
+    res.status(500).json({ message: "Failed to fetch tasks" });
+  }
 });
 
-// GET - Return a single task by ID
-app.get("/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
+// GET - Return a single task
+app.get("/tasks/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  const task = tasks.find((task) => task.id === id);
+    const task = await prisma.task.findUnique({
+      where: { id },
+    });
 
-  if (!task) {
-    return res.status(404).json({
-      message: "Task not found",
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    res.status(200).json(task);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch task",
     });
   }
-
-  res.status(200).json(task);
 });
 
-// POST - Create a new task
-app.post("/tasks", (req, res) => {
-  const { title, completed } = req.body;
+// POST - Create a task
+app.post("/tasks", async (req, res) => {
+  try {
+    const { title, completed } = req.body;
 
-  if (!title) {
-    return res.status(400).json({
-      message: "Title is required",
+    if (!title) {
+      return res.status(400).json({
+        message: "Title is required",
+      });
+    }
+
+    const task = await prisma.task.create({
+      data: {
+        title,
+        completed: completed ?? false,
+      },
+    });
+
+    res.status(201).json({
+      message: "Task created successfully",
+      task,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to create task",
     });
   }
-
-  const newTask = {
-    id: tasks.length + 1,
-    title,
-    completed: completed ?? false,
-  };
-
-  tasks.push(newTask);
-
-  res.status(201).json({
-    message: "Task created successfully",
-    task: newTask,
-  });
 });
 
 // PUT - Update a task
-app.put("/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
+app.put("/tasks/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const { title, completed } = req.body;
 
-  const task = tasks.find((task) => task.id === id);
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+    });
 
-  if (!task) {
-    return res.status(404).json({
-      message: "Task not found",
+    if (!existingTask) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    const updatedTask = await prisma.task.update({
+      where: { id },
+      data: {
+        title: title ?? existingTask.title,
+        completed: completed ?? existingTask.completed,
+      },
+    });
+
+    res.status(200).json({
+      message: "Task updated successfully",
+      task: updatedTask,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to update task",
     });
   }
-
-  const { title, completed } = req.body;
-
-  if (title !== undefined) task.title = title;
-  if (completed !== undefined) task.completed = completed;
-
-  res.status(200).json({
-    message: "Task updated successfully",
-    task,
-  });
 });
 
 // DELETE - Delete a task
-app.delete("/tasks/:id", (req, res) => {
-  const id = Number(req.params.id);
+app.delete("/tasks/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
 
-  const taskIndex = tasks.findIndex((task) => task.id === id);
+    const existingTask = await prisma.task.findUnique({
+      where: { id },
+    });
 
-  if (taskIndex === -1) {
-    return res.status(404).json({
-      message: "Task not found",
+    if (!existingTask) {
+      return res.status(404).json({
+        message: "Task not found",
+      });
+    }
+
+    await prisma.task.delete({
+      where: { id },
+    });
+
+    res.status(200).json({
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to delete task",
     });
   }
-
-  tasks.splice(taskIndex, 1);
-
-  res.status(200).json({
-    message: "Task deleted successfully",
-  });
 });
 
-// Start server
 app.listen(PORT, () => {
   console.log(`Server is running on http://localhost:${PORT}`);
 });

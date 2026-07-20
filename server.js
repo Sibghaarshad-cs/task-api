@@ -1,6 +1,6 @@
-const taskSchema = require("./validators/taskValidator");
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
+const taskSchema = require("./validators/taskValidator");
 
 const app = express();
 const prisma = new PrismaClient();
@@ -8,23 +8,37 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// GET - Return all tasks
+/* ============================
+   TASK ROUTES
+============================ */
+
+// GET - All tasks
 app.get("/tasks", async (req, res) => {
   try {
-    const tasks = await prisma.task.findMany();
+    const tasks = await prisma.task.findMany({
+      include: {
+        user: true,
+      },
+    });
+
     res.status(200).json(tasks);
   } catch (error) {
-    res.status(500).json({ message: "Failed to fetch tasks" });
+    res.status(500).json({
+      message: "Failed to fetch tasks",
+    });
   }
 });
 
-// GET - Return a single task
+// GET - Single task
 app.get("/tasks/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
 
     const task = await prisma.task.findUnique({
       where: { id },
+      include: {
+        user: true,
+      },
     });
 
     if (!task) {
@@ -41,23 +55,38 @@ app.get("/tasks/:id", async (req, res) => {
   }
 });
 
-// POST - Create a task
+// POST - Create task
 app.post("/tasks", async (req, res) => {
   try {
     const result = taskSchema.safeParse(req.body);
 
-if (!result.success) {
-  return res.status(400).json({
-    errors: result.error.issues,
-  });
-}
+    if (!result.success) {
+      return res.status(400).json({
+        errors: result.error.issues,
+      });
+    }
 
-const { title, completed } = result.data;
+    const { title, completed, userId } = result.data;
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
 
     const task = await prisma.task.create({
       data: {
         title,
         completed: completed ?? false,
+        user: {
+          connect: {
+            id: userId,
+          },
+        },
       },
     });
 
@@ -72,7 +101,7 @@ const { title, completed } = result.data;
   }
 });
 
-// PUT - Update a task
+// PUT - Update task
 app.put("/tasks/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -85,7 +114,7 @@ app.put("/tasks/:id", async (req, res) => {
       });
     }
 
-    const { title, completed } = result.data;
+    const { title, completed, userId } = result.data;
 
     const existingTask = await prisma.task.findUnique({
       where: { id },
@@ -97,11 +126,26 @@ app.put("/tasks/:id", async (req, res) => {
       });
     }
 
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
     const updatedTask = await prisma.task.update({
       where: { id },
       data: {
-        title: title ?? existingTask.title,
-        completed: completed ?? existingTask.completed,
+        title,
+        completed,
+        user: {
+          connect: {
+            id: userId,
+          },
+        },
       },
     });
 
@@ -115,7 +159,8 @@ app.put("/tasks/:id", async (req, res) => {
     });
   }
 });
-// DELETE - Delete a task
+
+// DELETE - Delete task
 app.delete("/tasks/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -140,6 +185,72 @@ app.delete("/tasks/:id", async (req, res) => {
   } catch (error) {
     res.status(500).json({
       message: "Failed to delete task",
+    });
+  }
+});
+
+/* ============================
+   USER ROUTES
+============================ */
+
+// GET - All users
+app.get("/users", async (req, res) => {
+  try {
+    const users = await prisma.user.findMany();
+
+    res.status(200).json(users);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch users",
+    });
+  }
+});
+
+// GET - Single user with tasks
+app.get("/users/:id", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const user = await prisma.user.findUnique({
+      where: { id },
+      include: {
+        tasks: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({
+        message: "User not found",
+      });
+    }
+
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to fetch user",
+    });
+  }
+});
+
+// POST - Create user
+app.post("/users", async (req, res) => {
+  try {
+    const { name, email } = req.body;
+
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+      },
+    });
+
+    res.status(201).json({
+      message: "User created successfully",
+      user,
+    });
+  } catch (error) {
+    res.status(500).json({
+      message: "Failed to create user",
     });
   }
 });

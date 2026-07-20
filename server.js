@@ -1,3 +1,4 @@
+const taskSchema = require("./validators/taskValidator");
 const express = require("express");
 const { PrismaClient } = require("@prisma/client");
 
@@ -43,13 +44,15 @@ app.get("/tasks/:id", async (req, res) => {
 // POST - Create a task
 app.post("/tasks", async (req, res) => {
   try {
-    const { title, completed } = req.body;
+    const result = taskSchema.safeParse(req.body);
 
-    if (!title) {
-      return res.status(400).json({
-        message: "Title is required",
-      });
-    }
+if (!result.success) {
+  return res.status(400).json({
+    errors: result.error.issues,
+  });
+}
+
+const { title, completed } = result.data;
 
     const task = await prisma.task.create({
       data: {
@@ -73,7 +76,16 @@ app.post("/tasks", async (req, res) => {
 app.put("/tasks/:id", async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const { title, completed } = req.body;
+
+    const result = taskSchema.safeParse(req.body);
+
+    if (!result.success) {
+      return res.status(400).json({
+        errors: result.error.issues,
+      });
+    }
+
+    const { title, completed } = result.data;
 
     const existingTask = await prisma.task.findUnique({
       where: { id },
@@ -103,7 +115,6 @@ app.put("/tasks/:id", async (req, res) => {
     });
   }
 });
-
 // DELETE - Delete a task
 app.delete("/tasks/:id", async (req, res) => {
   try {
